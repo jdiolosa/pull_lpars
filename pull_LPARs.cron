@@ -1,0 +1,2 @@
+source /admin/bin/pull_LPARs.lib
+__scan -w

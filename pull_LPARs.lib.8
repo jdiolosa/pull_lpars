@@ -1,0 +1,78 @@
+.\" Manpage for pull_LPARs.lib.
+.\" Contact root@localhost to correct errors or typos.
+.TH man 8 "05 Nov 2012" "1.0" "pull_LPARs.lib man page"
+.SH NAME
+pull_LPARs.lib
+.SH SYNOPSIS
+pull_LPARs.lib; __scan [-q | -query] [-w | -write] [-d | -database]
+
+.SH DESCRIPTION
+This is a function library that can pull a list of known managed systems and known unmanaged systems for use in other scripts.  This script can be called via the command line as listed in 
+.B COMMAND LINE EXAMPLES
+or you can call individual functions as listed in  
+.B SCRIPTING FUNCTIONS 
+section. also you can call a function and work with the variables. 
+
+.SH OPTIONS
+.BI \-q,
+.BI \-query
+Get a list of known managed and unmanaged systems display them on the screen.  NOTE: Does not write to the output file.
+
+.BI \-w,
+.BI \-write
+Get a list of all known managed and unmanaged servers and write them to a file for manual manipulation.  This writes to /admin/txt/lpar_inventory.txt.
+This Also sends the output file to the 61 and 71 nim servers.
+
+.BI \-d,
+.BI \-database
+Will get a list of all Managed LPARS and not the unmanaged list. NOTE: Does not write to the output file.
+
+.SH COMMAND LINE EXAMPLES
+To list all known managed and unmanaged servers that are Activated
+
+    source /admin/bin/pull_LPARs.ksh; __scan -q |grep -v "Not Activated" |awk -F"," {'print $1'}
+	
+
+.br
+To get a list of all known managed and unmanaged servers and write them to disk:
+
+    source /admin/bin/pull_LPARs.ksh; __scan -w
+
+Note: The __check is a list of pre-defined templates. Speak to Joe, Mills, or Hodge if another one is needed. 
+
+.SH SCRIPTING FUNCTIONS
+You may call the following functions so you can work with the arrays manually.  You will just need to source the functions database as listed above.  The following are a list of functions and the arrays they spit out.
+
+.IP
+.nf
+
+Function Name			Array Created			Description
+__get_lpar_names_HMC 	${A_lpar_listHMC[@]}	-- Pull list of all LPARS on Known HMC's.
+__get_lpar_names_RHEL 	${A_lpar_listRHEL[@}} 	-- pull a list of all known satelite LPARS.
+__get_lpar_names_SDMC 	${A_lpar_listSDMC[@]} 	-- pull a list of all known SDMC LPARS.
+__get_lpar_names_IVMS 	${A_lpar_listIVMS[@]} 	-- pull a list of all known IVMS LPARS.
+__non_managed	 		${A_Non_managed[@]}		-- Pull a list of all known unmanaged servers.
+__scan				NONE					-- Predefined reports see options.
+
+.fi
+.IP
+.SH FILES
+.TP 
+.I /admin/bin/ww 
+Wheres Waldo
+.TP
+.I /admin/txt/lpar_inventory.txt
+Output file
+.TP
+.I /admin/bin/pull_LPARs.py
+Python script to pull from Satellite
+.TP
+.I /admin/bin/pull_LPARs.cron
+Crontab entry to run everynight at 00:05
+.IP
+.SH RELATED INFORMATION
+This is a functions library that can be used for generating serverlists from all known unix servers.  It can be used via a script or directly from the command line.
+.SH BUGS
+No known bugs.
+.SH AUTHOR
+Joe Diolosa

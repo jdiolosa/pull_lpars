@@ -1,0 +1,261 @@
+#!/bin/bash
+# This script is used to create a /admin/txt/lpar_inventory.txt to be used 
+# by ww (where's waldo)
+#
+#
+######List of Management servers#################################
+HMCS="kpmhmc01 kpmhmc02 spmhmc01 spmhmc02"
+IVMS=""
+RHN="https://splsat01.graybar.com/rpc/api https://kplsat01.graybar.com/rpc/api https://kplsmgr01.graybar.com/rpc/api"
+#All servers to copy all servers list to"
+EXPORT_LIST="kpxnim61 spxnim61 kpxnim71 spxnim71 ksxbasis01 kplunix01 splunix01"
+declare -a LINUX=(splgem03 splgem04 splgem05)
+#Non managed servers
+declare -a NONMAN=(senc01px h827)
+#just in case __cleanup wasn't called /wink
+j=0
+k=0
+l=0
+m=0
+###V#############################################################
+#Variables#######################################################
+DATE=`date '+%Y%m%d-%H%M%S'`
+OUT="/admin/txt/lpar_inventory.txt"
+RHEL_path="/admin/bin/pull_LPARs.py"
+#################################################################
+
+#Function to get necessary information from Power5 HMC and format it for ww.
+function p5_script {
+   hmcname=$1
+   ssh hscroot@$hmcname "lssyscfg -r sys -F \"name\" |
+   while read managedsystem
+      do
+      TYPE=\`lssyscfg -r sys -m \$managedsystem -F \"type_model\"\` 
+      SERIAL=\`lssyscfg -r sys -m \$managedsystem -F \"serial_num\"\` 
+      H=\`echo \$SERIAL | cut -c 1-2\`
+      F=\`echo \$SERIAL | cut -c 3-7\`
+      SERIAL=\"\${H}-\${F}\"
+      lssyscfg -r lpar -m \$managedsystem -F \"name\" |
+      while read lparname
+         do
+         LPARID=\`lssyscfg -r lpar -m \$managedsystem -F \"lpar_id\" --filter \"lpar_names=\$lparname\"\`
+         LPARENV=\`lssyscfg -r lpar -m \$managedsystem -F \"lpar_env\" --filter \"lpar_names=\$lparname\"\`
+         STATE=\`lssyscfg -r lpar -m \$managedsystem -F \"state\" --filter \"lpar_names=\$lparname\"\`
+         echo \"\${lparname},\${managedsystem},\${SERIAL},\${TYPE},\${LPARENV},\${STATE},${hmcname},\${LPARID}\" | grep -v HSCL
+         done
+       done
+      "
+}
+
+#Function to get necessary information from Power4 HMC and format it for ww.
+function p4_script {
+   hmcname=$1
+   MSLIST=`ssh hscroot@$hmcname "lssyscfg -r sys --all" | grep -v CSPVersion | awk {'print $1 "@" $6 "@" $7 "@" $8'}`
+   for managedsystem in $MSLIST
+      do
+      TYPE=`echo $managedsystem | awk -F"@" {'print $2'}`
+      if echo $managedsystem | awk -F"@" {'print $3'} | grep LPAR 1>/dev/null 2>/dev/null
+         then
+         SERIAL=`echo $managedsystem | awk -F"@" {'print $4'}`
+      else
+         SERIAL=`echo $managedsystem | awk -F"@" {'print $3'}`
+      fi
+      managedsystem=`echo $managedsystem | awk -F"@" {'print $1'}`
+      H=`echo $SERIAL | cut -c 1-2`
+      F=`echo $SERIAL | cut -c 3-7`
+      SERIAL="${H}-${F}"
+      LPARLIST=`ssh hscroot@$hmcname "lssyscfg -r lpar -m $managedsystem --all" | grep -v DLPAR | awk {'print $1 "@" $2 "@" $4'}`
+      for lparname in $LPARLIST
+         do
+         LPARID=`echo $lparname | awk -F"@" {'print $2'}`
+         ENV="aixlinux"
+         STATE=`echo $lparname | awk -F"@" {'print $3'}`
+         if echo $STATE | grep Not 1>/dev/null 2>/dev/null
+            then
+            STATE="Not Running"
+         fi
+         lparname=`echo $lparname | awk -F"@" {'print $1'}`
+         echo "${lparname},${managedsystem},${SERIAL},${TYPE},${ENV},${STATE},${hmcname},${LPARID}"
+         done
+       done
+}
+
+#Process the critical information from IVMS
+function IVM_script {
+   ivmname=$1
+   ssh padmin@$ivmname "lssyscfg -r sys -F \"name\" |
+   while read managedsystem
+      do
+      TYPE=\`lssyscfg -r sys -m \$managedsystem -F \"type_model\"\`
+      SERIAL=\`lssyscfg -r sys -m \$managedsystem -F \"serial_num\"\`
+      lssyscfg -r lpar -m \$managedsystem -F \"name\" |
+      while read lparname
+         do
+         LPARID=\`lssyscfg -r lpar -m \$managedsystem -F \"lpar_id\" --filter \"lpar_names=\$lparname\"\`
+         LPARENV=\`lssyscfg -r lpar -m \$managedsystem -F \"lpar_env\" --filter \"lpar_names=\$lparname\"\`
+         STATE=\`lssyscfg -r lpar -m \$managedsystem -F \"state\" --filter \"lpar_names=\$lparname\"\`
+         echo \"\${lparname},\${managedsystem},\${SERIAL},\${TYPE},\${LPARENV},\${STATE},${ivmname},\${LPARID}\" | grep -v HSCL
+         done
+       done
+      "
+} ## end IVM_script
+
+#process critical information from SDMC
+function SDMC_script {
+   sdmcname=$1
+   ssh sysadmin@$sdmcname "lssyscfg -r sys -F \"name\" |
+   while read managedsystem
+      do
+      TYPE=\`lssyscfg -r sys -m \$managedsystem -F \"type_model\"\`
+      SERIAL=\`lssyscfg -r sys -m \$managedsystem -F \"serial_num\"\`
+      lssyscfg -r lpar -m \$managedsystem -F \"name\" |
+      while read lparname
+         do
+         LPARID=\`lssyscfg -r lpar -m \$managedsystem -F \"lpar_id\" --filter \"lpar_names=\$lparname\"\`
+         LPARENV=\`lssyscfg -r lpar -m \$managedsystem -F \"lpar_env\" --filter \"lpar_names=\$lparname\"\`
+         STATE=\`lssyscfg -r lpar -m \$managedsystem -F \"state\" --filter \"lpar_names=\$lparname\"\`
+         echo \"\${lparname},\${managedsystem},\${SERIAL},\${TYPE},\${LPARENV},\${STATE},${sdmcname},\${LPARID}\" | grep -v HSCL
+         done
+      done
+      "
+} ## end SDMC_script
+
+#Iterates through all of the ivms hosts and outputs hostnames.
+function __get_lpar_names_IVMS {
+for ivmname in $IVMS; do
+	A_lpar_listIVMS[$k]=$(IVM_script "$ivmname");k=$(($k + 1));
+done
+}
+
+#Rips hostnames from teh SDMC
+function __get_lpar_names_SDMC {
+for sdmcname in $SDMC; do
+	A_lpar_listSDMC[$l]=$(SDMC_script "$sdmcname");l=$(($l + 1));
+done
+}
+
+#This function calls a python script to process names via satellite
+function __get_lpar_names_RHEL {
+for rhelname in $RHN; do
+	A_lpar_listRHEL[$m]=$($RHEL_path "$rhelname");m=$(($m + 1));
+done
+}
+
+#This function gets the HMC version and iterates through all needed information
+function __get_lpar_names_HMC {
+for hmcname in $HMCS; do
+   VERSION=`ssh hscroot@$hmcname "lshmc -V | grep Version" | awk -F: {'print $2'} | awk {'print $1'}`;
+   case $VERSION in
+           3) A_lpar_listHMC[$j]=$(p4_script "$hmcname");j=$(($j + 1));
+	   ;;
+           4) A_lpar_listHMC[$j]=$(p5_script "$hmcname");j=$(($j + 1));
+           ;;
+           5) A_lpar_listHMC[$j]=$(p5_script "$hmcname");j=$(($j + 1));
+           ;;
+           6) A_lpar_listHMC[$j]=$(p5_script "$hmcname");j=$(($j + 1));
+           ;;
+           7) A_lpar_listHMC[$j]=$(p5_script "$hmcname");j=$(($j + 1));
+           ;;
+           8) A_lpar_listHMC[$j]=$(p5_script "$hmcname");j=$(($j + 1));
+           ;;
+           9) A_lpar_listHMC[$j]=$(p5_script "$hmcname");j=$(($j + 1));
+           ;;
+   esac
+done
+}
+
+#Write all variables to $OUT
+function __write_array {
+mv $OUT $OUT.$DATE
+for hmc in "${A_lpar_listHMC[@]}"
+  do
+    echo "$hmc" >>$OUT
+  done
+for sdmc in "${A_lpar_listSDMC[@]}"
+  do
+    echo "$sdmc" >>$OUT
+  done
+for ivms in "${A_lpar_listIVMS[@]}"
+  do
+     echo "$ivms" >>$OUT
+  done
+#updated for new satellite
+for linux in "${A_lpar_listRHEL[@]}"
+  do
+    echo "$linux" >>$OUT
+  done
+
+}
+
+#Export all information to variables and the screen.
+function __querry_array {
+for hmc in "${A_lpar_listHMC[@]}"
+  do
+    echo "$hmc"
+  done
+for sdmc in "${A_lpar_listSDMC[@]}"
+  do
+    echo "$sdmc"
+  done
+for ivms in "${A_lpar_listIVMS[@]}"
+  do
+     echo "$ivms"
+  done
+#updated for new satellite
+for linux in "${A_lpar_listRHEL[@]}"
+  do
+    echo "$linux"
+  done
+}
+
+#Display all non managed systems.  kept seperate from managed because of auditing.
+function __non_managed {
+for non in "${NONMAN[@]}";
+  do
+     echo "$non";
+done
+}
+
+#This function is so we can track that this is being run#
+function __email {
+message=$(ls -altr /admin/txt/lpar_inventory.txt |awk '{print $6, $7}')
+mailx -s "ww was run at $date" joe.diolosa@graybar.com < $message
+#done
+} 
+
+#Default function for precreated reports.  This way we can create more views as necessary.
+function __scan {
+case "$1" in
+             "") __get_lpar_names_IVMS;__get_lpar_names_HMC;__get_lpar_names_RHEL;__write_array;__cleanup;;
+     -quarry|-q) __get_lpar_names_IVMS;__get_lpar_names_HMC;__get_lpar_names_RHEL;__querry_array;__non_managed;__cleanup;;
+      -write|-w) __get_lpar_names_IVMS;__get_lpar_names_HMC;__get_lpar_names_RHEL;__write_array;__export;__cleanup;;
+   -database|-d) __get_lpar_names_IVMS;__get_lpar_names_HMC;__get_lpar_names_RHEL;__querry_array;__cleanup;;
+   esac
+}
+
+#             "") __get_lpar_names_IVMS;__get_lpar_names_SDMC;__get_lpar_names_HMC;__get_lpar_names_RHEL;__write_array;__cleanup;;
+#     -quarry|-q) __get_lpar_names_IVMS;__get_lpar_names_SDMC;__get_lpar_names_HMC;__get_lpar_names_RHEL;__querry_array;__non_managed;__cleanup;;
+#      -write|-w) __get_lpar_names_IVMS;__get_lpar_names_SDMC;__get_lpar_names_HMC;__get_lpar_names_RHEL;__write_array;__export;__cleanup;;
+#   -database|-d) __get_lpar_names_IVMS;__get_lpar_names_SDMC;__get_lpar_names_HMC;__get_lpar_names_RHEL;__querry_array;__cleanup;;
+
+
+
+#Clean up used variables and arrays
+function __cleanup {
+unset A_lpar_list_RHEL
+unset A_lpar_listIVMS
+unset A_lpar_listSDMC
+unset A_lpar_listHMC
+unset NONMAN
+unset j
+unset k
+unset l
+unset m
+}
+
+#export the output files to pre-defined nim servers there must be root keys for this function to work.
+function __export {
+for i in $EXPORT_LIST; do
+scp $OUT $i:/admin/txt/lpar_inventory.txt >/dev/null
+done
+}
