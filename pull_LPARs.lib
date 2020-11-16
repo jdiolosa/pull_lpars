@@ -4,14 +4,14 @@
 #
 #
 ######List of Management servers#################################
-HMCS="kpmhmc01 kpmhmc02 spmhmc01 spmhmc02"
+HMCS="HMC's seperated by spacecs"
 IVMS=""
-RHN="https://splsat01.graybar.com/rpc/api https://kplsat01.graybar.com/rpc/api https://kplsmgr01.graybar.com/rpc/api"
+RHN="https://FQDN/rpc/api https://FQDN/rpc/api https://FQDN/rpc/api"
 #All servers to copy all servers list to"
-EXPORT_LIST="kpxnim61 spxnim61 kpxnim71 spxnim71 ksxbasis01 kplunix01 splunix01"
-declare -a LINUX=(splgem03 splgem04 splgem05)
+EXPORT_LIST="Nim boxes seperated by space"
+declare -a LINUX=(unmanaged linux boxes)
 #Non managed servers
-declare -a NONMAN=(senc01px h827)
+declare -a NONMAN=(seperated unmanaged servers)
 #just in case __cleanup wasn't called /wink
 j=0
 k=0
